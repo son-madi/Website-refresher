@@ -2,6 +2,8 @@ export type RefreshMode = 'dual' | 'iframe' | 'ping';
 
 export type IntervalType = 'fixed' | 'random';
 
+export type RunnerStatus = 'idle' | 'running' | 'paused' | 'stopped';
+
 export interface RefreshConfig {
   url: string;
   intervalType: IntervalType;
@@ -12,6 +14,7 @@ export interface RefreshConfig {
   soundNotification: boolean;
   refreshMode: RefreshMode;
   autoStartOnUrlChange: boolean;
+  maxCycles: number; // 0 = continuous, or 10, 25, 50, 100
 }
 
 export interface PingResult {

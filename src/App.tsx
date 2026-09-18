@@ -12,9 +12,10 @@ import { MetricsCards } from './components/MetricsCards';
 import { LiveFrame } from './components/LiveFrame';
 import { ActivityLog } from './components/ActivityLog';
 import { RailwayDeployModal } from './components/RailwayDeployModal';
-import { RefreshConfig, RefreshLogEntry, SessionStats, PingResult } from './types';
+import { RefreshConfig, RefreshLogEntry, SessionStats, PingResult, RunnerStatus } from './types';
 import { playRefreshChime } from './utils/audio';
-import { LayoutGrid, Eye, Terminal } from 'lucide-react';
+import { LayoutGrid, Eye, Terminal, Play, Square, Pause, RotateCcw } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 
 const LOCAL_STORAGE_RECENT_URLS = 'auto_refresher_recent_urls';
 const LOCAL_STORAGE_SAVED_CONFIG = 'auto_refresher_config';
@@ -25,7 +26,11 @@ export default function App() {
     try {
       const saved = localStorage.getItem(LOCAL_STORAGE_SAVED_CONFIG);
       if (saved) {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        return {
+          ...parsed,
+          maxCycles: parsed.maxCycles ?? 0,
+        };
       }
     } catch {
       // Ignore parse error
@@ -40,10 +45,14 @@ export default function App() {
       soundNotification: false,
       refreshMode: 'dual',
       autoStartOnUrlChange: false,
+      maxCycles: 0, // 0 = continuous
     };
   });
 
-  const [isRunning, setIsRunning] = useState<boolean>(false);
+  // Runner state: 'idle' | 'running' | 'paused' | 'stopped'
+  const [runnerStatus, setRunnerStatus] = useState<RunnerStatus>('idle');
+  const [cycleCount, setCycleCount] = useState<number>(0);
+
   const [currentIntervalDuration, setCurrentIntervalDuration] = useState<number>(30);
   const [remainingSeconds, setRemainingSeconds] = useState<number>(30);
   const [refreshKey, setRefreshKey] = useState<number>(1);
@@ -59,7 +68,7 @@ export default function App() {
     } catch {
       // Ignore
     }
-    return ['https://example.com', 'https://httpbin.org/get'];
+    return ['https://example.com', 'https://httpbin.org/get', 'https://1.1.1.1/cdn-cgi/trace'];
   });
 
   const [lastPing, setLastPing] = useState<PingResult | null>(null);
@@ -72,6 +81,8 @@ export default function App() {
     startedAt: null,
     lastRefreshedAt: null,
   });
+
+  const isRunning = runnerStatus === 'running';
 
   // Calculate next cycle duration based on current config
   const calculateNextInterval = useCallback((): number => {
@@ -92,7 +103,7 @@ export default function App() {
     }
   }, [config]);
 
-  // Execute single refresh event (for both scheduled loop and instant button)
+  // Execute single refresh event
   const triggerRefreshCycle = useCallback(async () => {
     if (!config.url) return;
 
@@ -100,13 +111,6 @@ export default function App() {
 
     if (config.soundNotification) {
       playRefreshChime();
-    }
-
-    // Determine target URL with cache buster query if enabled
-    let finalUrl = config.url;
-    if (config.useCacheBuster) {
-      const separator = finalUrl.includes('?') ? '&' : '?';
-      finalUrl = `${finalUrl}${separator}_t=${Date.now()}`;
     }
 
     // Always increment key to reload iframe if in dual or iframe mode
@@ -145,6 +149,33 @@ export default function App() {
     const isSuccess = pingOutcome ? pingOutcome.ok : true;
     const latency = pingOutcome?.latencyMs;
 
+    // Update cycle count
+    setCycleCount((prevCount) => {
+      const newCount = prevCount + 1;
+
+      // Check max cycles auto-stop
+      if (config.maxCycles > 0 && newCount >= config.maxCycles) {
+        setTimeout(() => {
+          setRunnerStatus('stopped');
+          setLogs((l) => [
+            {
+              id: `${Date.now()}-limit`,
+              timestamp: new Date(),
+              url: config.url,
+              intervalUsed,
+              status: 'warning',
+              statusCode: 200,
+              message: `Completed target limit of ${config.maxCycles} refreshes. Auto-stopped.`,
+              cacheBusterApplied: false,
+            },
+            ...l,
+          ]);
+        }, 100);
+      }
+
+      return newCount;
+    });
+
     // Update session metrics
     setStats((prev) => {
       const total = prev.totalRefreshes + 1;
@@ -177,7 +208,7 @@ export default function App() {
       cacheBusterApplied: config.useCacheBuster,
     };
 
-    setLogs((prev) => [newLogEntry, ...prev.slice(0, 99)]); // Keep last 100 entries
+    setLogs((prev) => [newLogEntry, ...prev.slice(0, 99)]);
 
     // Reset countdown for next iteration
     const nextDuration = calculateNextInterval();
@@ -191,7 +222,7 @@ export default function App() {
 
   // Main countdown timer loop
   useEffect(() => {
-    if (!isRunning) return;
+    if (runnerStatus !== 'running') return;
 
     const intervalTimer = setInterval(() => {
       setRemainingSeconds((prev) => {
@@ -204,23 +235,102 @@ export default function App() {
     }, 100);
 
     return () => clearInterval(intervalTimer);
-  }, [isRunning, triggerRefreshCycle]);
+  }, [runnerStatus, triggerRefreshCycle]);
 
   // Session Uptime clock
   useEffect(() => {
-    if (!isRunning) return;
+    if (runnerStatus !== 'running') return;
 
     const uptimeTimer = setInterval(() => {
       setUptimeSeconds((prev) => prev + 1);
     }, 1000);
 
     return () => clearInterval(uptimeTimer);
-  }, [isRunning]);
+  }, [runnerStatus]);
 
-  // Global Keyboard Shortcuts (Space to play/pause, 'R' to refresh immediately)
+  // Explicit START Function
+  const handleStart = () => {
+    if (!stats.startedAt) {
+      setStats((prev) => ({ ...prev, startedAt: new Date() }));
+    }
+    const nextDuration = calculateNextInterval();
+    setCurrentIntervalDuration(nextDuration);
+    setRemainingSeconds(nextDuration);
+    setRunnerStatus('running');
+
+    // Add log event
+    setLogs((prev) => [
+      {
+        id: `${Date.now()}-start`,
+        timestamp: new Date(),
+        url: config.url,
+        intervalUsed: nextDuration,
+        status: 'success',
+        statusCode: 200,
+        message: `Auto-refresh started. Cycle interval: ${nextDuration}s`,
+        cacheBusterApplied: config.useCacheBuster,
+      },
+      ...prev.slice(0, 99),
+    ]);
+  };
+
+  // Explicit STOP Function
+  const handleStop = () => {
+    setRunnerStatus('stopped');
+    const nextDuration = calculateNextInterval();
+    setRemainingSeconds(nextDuration);
+
+    setLogs((prev) => [
+      {
+        id: `${Date.now()}-stop`,
+        timestamp: new Date(),
+        url: config.url,
+        intervalUsed: currentIntervalDuration,
+        status: 'warning',
+        statusCode: 200,
+        message: 'Auto-refresh loop stopped by user.',
+        cacheBusterApplied: false,
+      },
+      ...prev.slice(0, 99),
+    ]);
+  };
+
+  // Explicit PAUSE Function
+  const handlePause = () => {
+    setRunnerStatus('paused');
+  };
+
+  // Explicit RESUME Function
+  const handleResume = () => {
+    setRunnerStatus('running');
+  };
+
+  // Instant Force Refresh
+  const handleInstantRefresh = () => {
+    triggerRefreshCycle();
+  };
+
+  // Reset Session Statistics & Logs
+  const handleResetStats = () => {
+    const nextDuration = calculateNextInterval();
+    setStats({
+      totalRefreshes: 0,
+      successfulRefreshes: 0,
+      failedRefreshes: 0,
+      averageLatencyMs: 0,
+      startedAt: runnerStatus === 'running' ? new Date() : null,
+      lastRefreshedAt: null,
+    });
+    setCycleCount(0);
+    setUptimeSeconds(0);
+    setCurrentIntervalDuration(nextDuration);
+    setRemainingSeconds(nextDuration);
+    setLogs([]);
+  };
+
+  // Global Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't intercept if user is typing in an input
       if (
         e.target instanceof HTMLInputElement ||
         e.target instanceof HTMLTextAreaElement ||
@@ -231,16 +341,25 @@ export default function App() {
 
       if (e.code === 'Space') {
         e.preventDefault();
-        setIsRunning((prev) => !prev);
+        if (runnerStatus === 'running') {
+          handlePause();
+        } else if (runnerStatus === 'paused') {
+          handleResume();
+        } else {
+          handleStart();
+        }
+      } else if (e.key === 's' || e.key === 'S') {
+        e.preventDefault();
+        handleStop();
       } else if (e.key === 'r' || e.key === 'R') {
         e.preventDefault();
-        triggerRefreshCycle();
+        handleInstantRefresh();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [triggerRefreshCycle]);
+  }, [runnerStatus, triggerRefreshCycle]);
 
   // Update Recent URLs list
   const addRecentUrl = (newUrl: string) => {
@@ -265,7 +384,6 @@ export default function App() {
       return updated;
     });
 
-    // If interval settings changed, adjust current interval
     if (
       changes.intervalType !== undefined ||
       changes.fixedSeconds !== undefined ||
@@ -274,57 +392,31 @@ export default function App() {
     ) {
       const nextDuration = calculateNextInterval();
       setCurrentIntervalDuration(nextDuration);
-      setRemainingSeconds(nextDuration);
+      if (runnerStatus !== 'running') {
+        setRemainingSeconds(nextDuration);
+      }
     }
-  };
-
-  const handleTogglePlay = () => {
-    if (!isRunning && !stats.startedAt) {
-      setStats((prev) => ({ ...prev, startedAt: new Date() }));
-      const nextDuration = calculateNextInterval();
-      setCurrentIntervalDuration(nextDuration);
-      setRemainingSeconds(nextDuration);
-    }
-    setIsRunning((prev) => !prev);
-  };
-
-  const handleInstantRefresh = () => {
-    triggerRefreshCycle();
-  };
-
-  const handleResetStats = () => {
-    const nextDuration = calculateNextInterval();
-    setStats({
-      totalRefreshes: 0,
-      successfulRefreshes: 0,
-      failedRefreshes: 0,
-      averageLatencyMs: 0,
-      startedAt: isRunning ? new Date() : null,
-      lastRefreshedAt: null,
-    });
-    setUptimeSeconds(0);
-    setCurrentIntervalDuration(nextDuration);
-    setRemainingSeconds(nextDuration);
-    setLogs([]);
   };
 
   return (
     <div className="min-h-screen bg-zinc-100/70 text-zinc-900 flex flex-col font-sans selection:bg-indigo-500 selection:text-white">
       {/* Top Navbar */}
       <Navbar
-        isRunning={isRunning}
-        onTogglePlay={handleTogglePlay}
+        runnerStatus={runnerStatus}
+        onStart={handleStart}
+        onStop={handleStop}
+        onPause={handlePause}
         soundEnabled={config.soundNotification}
         onToggleSound={() => handleConfigChange({ soundNotification: !config.soundNotification })}
         onOpenRailwayModal={() => setIsRailwayModalOpen(true)}
         uptimeSeconds={uptimeSeconds}
       />
 
-      {/* Main Content Workspace */}
+      {/* Main Workspace */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
         {/* Top Control Grid: URL Input + Interval Configuration */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-          {/* Left: Website URL & Mode Configuration */}
+          {/* Left Column: Target Website & Master Controls */}
           <div className="lg:col-span-7 flex flex-col gap-5">
             <UrlInputBar
               config={config}
@@ -335,19 +427,24 @@ export default function App() {
               onSelectRecentUrl={(selectedUrl) => handleConfigChange({ url: selectedUrl })}
             />
 
-            {/* Master Control Bar (Play/Pause, Countdown bar, Refresh Now) */}
+            {/* Master Tactile Start / Stop / Pause / Resume Controls */}
             <ControlBar
-              isRunning={isRunning}
-              onTogglePlay={handleTogglePlay}
+              runnerStatus={runnerStatus}
+              onStart={handleStart}
+              onStop={handleStop}
+              onPause={handlePause}
+              onResume={handleResume}
               onInstantRefresh={handleInstantRefresh}
               onResetStats={handleResetStats}
               remainingSeconds={remainingSeconds}
               totalIntervalSeconds={currentIntervalDuration}
               isRefreshingNow={isRefreshingNow}
+              currentCycleCount={cycleCount}
+              maxCycles={config.maxCycles}
             />
           </div>
 
-          {/* Right: Interval Configurator (10 to 45 seconds or custom seconds/minutes) */}
+          {/* Right Column: Timing & Interval Configuration */}
           <div className="lg:col-span-5">
             <IntervalConfig
               config={config}
@@ -362,12 +459,12 @@ export default function App() {
           stats={stats}
           uptimeSeconds={uptimeSeconds}
           lastPing={lastPing}
-          isRunning={isRunning}
+          runnerStatus={runnerStatus}
         />
 
-        {/* View Layout Tabs & Actions */}
-        <div className="flex items-center justify-between gap-4 pt-2">
-          <div className="flex items-center bg-white p-1 rounded-xl border border-zinc-200 shadow-2xs text-xs font-medium">
+        {/* View Layout Tabs & Keyboard Hints */}
+        <div className="flex flex-wrap items-center justify-between gap-4 pt-1">
+          <div className="flex items-center bg-white p-1 rounded-xl border border-zinc-200 shadow-2xs text-xs font-semibold">
             <button
               id="view-tab-split"
               type="button"
@@ -403,22 +500,33 @@ export default function App() {
             </button>
           </div>
 
-          <div className="hidden sm:flex items-center gap-2 text-xs text-zinc-500">
-            <span className="inline-flex items-center gap-1">
-              <kbd className="px-1.5 py-0.5 rounded bg-zinc-200/80 border border-zinc-300 font-mono text-[10px]">Space</kbd>
-              <span>Play/Pause</span>
+          {/* Keyboard shortcuts reminder */}
+          <div className="hidden sm:flex items-center gap-3 text-xs text-zinc-500 font-medium">
+            <span className="inline-flex items-center gap-1.5">
+              <kbd className="px-1.5 py-0.5 rounded-md bg-zinc-200/80 border border-zinc-300 font-mono text-[10px] text-zinc-700 shadow-2xs">
+                Space
+              </kbd>
+              <span>Play / Pause</span>
             </span>
             <span className="text-zinc-300">•</span>
-            <span className="inline-flex items-center gap-1">
-              <kbd className="px-1.5 py-0.5 rounded bg-zinc-200/80 border border-zinc-300 font-mono text-[10px]">R</kbd>
+            <span className="inline-flex items-center gap-1.5">
+              <kbd className="px-1.5 py-0.5 rounded-md bg-zinc-200/80 border border-zinc-300 font-mono text-[10px] text-zinc-700 shadow-2xs">
+                S
+              </kbd>
+              <span>Stop</span>
+            </span>
+            <span className="text-zinc-300">•</span>
+            <span className="inline-flex items-center gap-1.5">
+              <kbd className="px-1.5 py-0.5 rounded-md bg-zinc-200/80 border border-zinc-300 font-mono text-[10px] text-zinc-700 shadow-2xs">
+                R
+              </kbd>
               <span>Refresh Now</span>
             </span>
           </div>
         </div>
 
-        {/* Main Stage View: Split or Single */}
+        {/* Live Preview / Activity Logs Workspace */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          {/* Live Preview Window */}
           {(activeView === 'split' || activeView === 'preview') && (
             <div className={activeView === 'split' ? 'lg:col-span-8' : 'lg:col-span-12'}>
               <LiveFrame
@@ -432,7 +540,6 @@ export default function App() {
             </div>
           )}
 
-          {/* Activity Logs Panel */}
           {(activeView === 'split' || activeView === 'logs') && (
             <div className={activeView === 'split' ? 'lg:col-span-4' : 'lg:col-span-12'}>
               <ActivityLog logs={logs} onClearLogs={() => setLogs([])} />
@@ -441,7 +548,7 @@ export default function App() {
         </div>
       </main>
 
-      {/* Railway Deployment Instructions Modal */}
+      {/* Railway Deployment Modal */}
       <RailwayDeployModal
         isOpen={isRailwayModalOpen}
         onClose={() => setIsRailwayModalOpen(false)}
