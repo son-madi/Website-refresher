@@ -12,6 +12,7 @@ interface NavbarProps {
   onToggleSound: () => void;
   onOpenRailwayModal: () => void;
   uptimeSeconds: number;
+  remainingSeconds?: number;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -23,6 +24,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onToggleSound,
   onOpenRailwayModal,
   uptimeSeconds,
+  remainingSeconds,
 }) => {
   const isRunning = runnerStatus === 'running';
   const isPaused = runnerStatus === 'paused';
@@ -40,74 +42,81 @@ export const Navbar: React.FC<NavbarProps> = ({
   const getStatusLabel = () => {
     switch (runnerStatus) {
       case 'running':
-        return 'Running Auto-Refresh';
+        return 'Running';
       case 'paused':
         return 'Paused';
       case 'stopped':
         return 'Stopped';
       default:
-        return 'Ready / Idle';
+        return 'Ready';
     }
   };
 
   return (
-    <header className="border-b border-zinc-200/80 bg-white/90 backdrop-blur-md sticky top-0 z-30 transition-all">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
+    <header className="border-b border-zinc-800/80 bg-zinc-950/85 backdrop-blur-md sticky top-0 z-30 transition-all">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 h-14 sm:h-16 flex items-center justify-between gap-2 sm:gap-4">
         {/* Logo & Title */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <motion.div
             whileHover={{ scale: 1.05, rotate: 10 }}
             whileTap={{ scale: 0.95 }}
-            className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-violet-500 flex items-center justify-center text-white shadow-md shadow-indigo-200/60"
+            className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-violet-500 flex items-center justify-center text-white shadow-md shadow-indigo-950/60 shrink-0"
           >
             <RefreshCw
-              className={`w-5 h-5 ${isRunning ? 'animate-spin' : ''}`}
+              className={`w-4 h-4 sm:w-5 sm:h-5 ${isRunning ? 'animate-spin' : ''}`}
               style={{ animationDuration: '3.5s' }}
             />
           </motion.div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-base font-bold text-zinc-900 tracking-tight">Auto Refresher</h1>
-              <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-100">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <h1 className="text-sm sm:text-base font-bold text-zinc-100 tracking-tight truncate">
+                <span className="hidden xs:inline">Auto </span>Refresher
+              </h1>
+              <span className="hidden lg:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
                 Railway Ready
               </span>
             </div>
-            <p className="text-xs text-zinc-500 hidden md:block">Keep-alive pinger & configurable website reloader</p>
+            <p className="text-[11px] text-zinc-400 hidden md:block truncate">Keep-alive pinger & configurable reloader</p>
           </div>
         </div>
 
-        {/* Center Dynamic Status Indicator */}
-        <div className="hidden sm:flex items-center gap-2 bg-zinc-50 border border-zinc-200/80 px-3.5 py-1.5 rounded-full text-xs font-medium text-zinc-700 shadow-2xs">
-          <span className="relative flex h-2.5 w-2.5">
+        {/* Center Dynamic Status Indicator (Desktop) */}
+        <div className="hidden md:flex items-center gap-2 bg-zinc-900/90 border border-zinc-800 px-3 py-1 rounded-full text-xs font-medium text-zinc-300 shadow-2xs">
+          <span className="relative flex h-2 w-2">
             {isRunning && (
               <motion.span
-                animate={{ scale: [1, 1.8, 1], opacity: [0.75, 0, 0.75] }}
+                animate={{ scale: [1, 2, 1], opacity: [0.8, 0, 0.8] }}
                 transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
                 className="absolute inline-flex h-full w-full rounded-full bg-emerald-400"
               />
             )}
             <span
-              className={`relative inline-flex rounded-full h-2.5 w-2.5 ${
+              className={`relative inline-flex rounded-full h-2 w-2 ${
                 isRunning
                   ? 'bg-emerald-500'
                   : isPaused
                   ? 'bg-amber-400'
                   : runnerStatus === 'stopped'
                   ? 'bg-rose-500'
-                  : 'bg-zinc-400'
+                  : 'bg-zinc-500'
               }`}
             />
           </span>
-          <span className="font-semibold">{getStatusLabel()}</span>
+          <span className="font-semibold text-zinc-200">{getStatusLabel()}</span>
+          {isRunning && remainingSeconds !== undefined && (
+            <span className="text-indigo-400 font-mono text-[11px] font-semibold">
+              ({remainingSeconds.toFixed(1)}s)
+            </span>
+          )}
           {(isRunning || isPaused) && (
-            <span className="text-zinc-400 ml-1 pl-2 border-l border-zinc-200 font-mono text-[11px]">
+            <span className="text-zinc-500 ml-1 pl-2 border-l border-zinc-800 font-mono text-[11px]">
               {formatUptime(uptimeSeconds)}
             </span>
           )}
         </div>
 
-        {/* Action Controls */}
-        <div className="flex items-center gap-2 sm:gap-2.5">
+        {/* Action Controls - Scaled & Touch friendly on mobile */}
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           {/* Quick Start / Stop / Pause Actions */}
           {!isRunning ? (
             <motion.button
@@ -115,23 +124,23 @@ export const Navbar: React.FC<NavbarProps> = ({
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               onClick={onStart}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm shadow-emerald-200 transition-colors"
+              className="inline-flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm shadow-emerald-950/50 transition-colors"
             >
               <Play className="w-3.5 h-3.5 fill-current" />
               <span>Start</span>
             </motion.button>
           ) : (
-            <>
+            <div className="flex items-center gap-1 sm:gap-1.5">
               <motion.button
                 id="navbar-pause-btn"
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={onPause}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200 transition-colors"
+                className="inline-flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 border border-amber-500/30 transition-colors"
                 title="Pause countdown"
               >
-                <Pause className="w-3.5 h-3.5 fill-current" />
-                <span className="hidden xs:inline">Pause</span>
+                <Pause className="w-3 h-3 fill-current" />
+                <span className="hidden sm:inline">Pause</span>
               </motion.button>
 
               <motion.button
@@ -139,13 +148,13 @@ export const Navbar: React.FC<NavbarProps> = ({
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={onStop}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-rose-600 text-white hover:bg-rose-700 shadow-sm shadow-rose-200 transition-colors"
-                title="Completely stop auto-refreshing"
+                className="inline-flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-rose-600 text-white hover:bg-rose-500 shadow-sm shadow-rose-950/50 transition-colors"
+                title="Stop auto-refreshing"
               >
                 <Square className="w-3 h-3 fill-current" />
-                <span>Stop</span>
+                <span className="hidden sm:inline">Stop</span>
               </motion.button>
-            </>
+            </div>
           )}
 
           {/* Sound Toggle */}
@@ -154,14 +163,14 @@ export const Navbar: React.FC<NavbarProps> = ({
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={onToggleSound}
-            title={soundEnabled ? 'Disable refresh chime sound' : 'Enable refresh chime sound'}
-            className={`p-2 rounded-lg text-xs transition-colors border ${
+            title={soundEnabled ? 'Mute sound notification' : 'Enable sound notification'}
+            className={`p-1.5 sm:p-2 rounded-lg text-xs transition-colors border ${
               soundEnabled
-                ? 'bg-indigo-50 text-indigo-700 border-indigo-200 shadow-xs'
-                : 'bg-white text-zinc-500 hover:text-zinc-700 hover:bg-zinc-50 border-zinc-200'
+                ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40 shadow-xs'
+                : 'bg-zinc-900 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 border-zinc-800'
             }`}
           >
-            {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+            {soundEnabled ? <Volume2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <VolumeX className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
           </motion.button>
 
           {/* Railway Deploy Modal */}
@@ -170,10 +179,11 @@ export const Navbar: React.FC<NavbarProps> = ({
             whileHover={{ scale: 1.03 }}
             whileTap={{ scale: 0.97 }}
             onClick={onOpenRailwayModal}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-900 text-white hover:bg-zinc-800 transition-all shadow-sm"
+            className="inline-flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700/60 transition-all shadow-xs"
+            title="Railway web url configuration and troubleshooting guide"
           >
-            <Terminal className="w-3.5 h-3.5 text-indigo-300" />
-            <span className="hidden sm:inline">Railway Deploy</span>
+            <Terminal className="w-3.5 h-3.5 text-indigo-400" />
+            <span className="hidden sm:inline">Railway</span>
             <span className="sm:hidden">Deploy</span>
           </motion.button>
         </div>

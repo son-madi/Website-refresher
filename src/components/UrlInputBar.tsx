@@ -55,36 +55,36 @@ export const UrlInputBar: React.FC<UrlInputBarProps> = ({
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm p-4 sm:p-5 transition-all">
+    <div className="bg-zinc-900/90 rounded-2xl border border-zinc-800 shadow-xl shadow-black/20 p-4 sm:p-5 transition-all">
       {/* Top row: Label & mode badges */}
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+      <div className="flex flex-wrap items-center justify-between gap-2.5 mb-3">
         <div className="flex items-center gap-2">
-          <label htmlFor="target-website-input" className="text-xs font-semibold uppercase tracking-wider text-zinc-500 flex items-center gap-1.5">
-            <Globe className="w-3.5 h-3.5 text-indigo-600" />
+          <label htmlFor="target-website-input" className="text-xs font-semibold uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
+            <Globe className="w-3.5 h-3.5 text-indigo-400" />
             Target Website URL
           </label>
           {isRailwayUrl && (
-            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-violet-100 text-violet-700 border border-violet-200">
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-violet-500/10 text-violet-300 border border-violet-500/20">
               Railway App Detected
             </span>
           )}
         </div>
 
         {/* Mode Selector */}
-        <div className="flex items-center bg-zinc-100 p-0.5 rounded-lg border border-zinc-200/80 text-xs">
+        <div className="flex items-center bg-zinc-950/80 p-0.5 rounded-lg border border-zinc-800 text-xs">
           <button
             id="mode-dual-btn"
             type="button"
             onClick={() => onChangeConfig({ refreshMode: 'dual' })}
             className={`px-2.5 py-1 rounded-md font-medium transition-all flex items-center gap-1 ${
               config.refreshMode === 'dual'
-                ? 'bg-white text-zinc-900 shadow-xs'
-                : 'text-zinc-600 hover:text-zinc-900'
+                ? 'bg-zinc-800 text-zinc-100 shadow-xs'
+                : 'text-zinc-400 hover:text-zinc-200'
             }`}
             title="Reloads live preview and pings server status simultaneously"
           >
-            <Layers className="w-3 h-3 text-indigo-500" />
-            <span>Dual Mode</span>
+            <Layers className="w-3 h-3 text-indigo-400" />
+            <span>Dual</span>
           </button>
           <button
             id="mode-iframe-btn"
@@ -92,13 +92,13 @@ export const UrlInputBar: React.FC<UrlInputBarProps> = ({
             onClick={() => onChangeConfig({ refreshMode: 'iframe' })}
             className={`px-2.5 py-1 rounded-md font-medium transition-all flex items-center gap-1 ${
               config.refreshMode === 'iframe'
-                ? 'bg-white text-zinc-900 shadow-xs'
-                : 'text-zinc-600 hover:text-zinc-900'
+                ? 'bg-zinc-800 text-zinc-100 shadow-xs'
+                : 'text-zinc-400 hover:text-zinc-200'
             }`}
             title="Reloads the visual embedded frame"
           >
-            <Zap className="w-3 h-3 text-emerald-500" />
-            <span>Live Frame</span>
+            <Zap className="w-3 h-3 text-emerald-400" />
+            <span>Frame</span>
           </button>
           <button
             id="mode-ping-btn"
@@ -106,13 +106,13 @@ export const UrlInputBar: React.FC<UrlInputBarProps> = ({
             onClick={() => onChangeConfig({ refreshMode: 'ping' })}
             className={`px-2.5 py-1 rounded-md font-medium transition-all flex items-center gap-1 ${
               config.refreshMode === 'ping'
-                ? 'bg-white text-zinc-900 shadow-xs'
-                : 'text-zinc-600 hover:text-zinc-900'
+                ? 'bg-zinc-800 text-zinc-100 shadow-xs'
+                : 'text-zinc-400 hover:text-zinc-200'
             }`}
             title="Background HTTP keep-alive pings (saves bandwidth, bypasses iframe blockers)"
           >
-            <Server className="w-3 h-3 text-violet-500" />
-            <span>Server Keep-Alive</span>
+            <Server className="w-3 h-3 text-violet-400" />
+            <span>Ping Only</span>
           </button>
         </div>
       </div>
@@ -120,7 +120,7 @@ export const UrlInputBar: React.FC<UrlInputBarProps> = ({
       {/* URL Input Bar Field */}
       <div className="relative flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
         <div className="relative flex-1">
-          <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-400">
+          <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-500">
             <Globe className="w-4 h-4" />
           </div>
           <input
@@ -135,8 +135,8 @@ export const UrlInputBar: React.FC<UrlInputBarProps> = ({
                 onInstantRefresh();
               }
             }}
-            placeholder="e.g. https://my-railway-app.up.railway.app or example.com"
-            className="w-full pl-10 pr-24 py-2.5 text-sm bg-zinc-50 hover:bg-zinc-100/70 focus:bg-white border border-zinc-200 focus:border-indigo-500 rounded-xl outline-hidden transition-all text-zinc-900 placeholder:text-zinc-400 font-mono"
+            placeholder="e.g. https://my-app.up.railway.app or example.com"
+            className="w-full pl-10 pr-20 py-2.5 text-sm bg-zinc-950/80 hover:bg-zinc-950 focus:bg-zinc-950 border border-zinc-800 focus:border-indigo-500 rounded-xl outline-hidden transition-all text-zinc-100 placeholder:text-zinc-500 font-mono"
           />
 
           {/* Right helper buttons inside input */}
@@ -146,7 +146,7 @@ export const UrlInputBar: React.FC<UrlInputBarProps> = ({
                 href={config.url}
                 target="_blank"
                 rel="noreferrer noopener"
-                className="p-1.5 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-200/60 rounded-md transition-colors"
+                className="p-1.5 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded-md transition-colors"
                 title="Open directly in new tab"
               >
                 <ExternalLink className="w-3.5 h-3.5" />
@@ -158,7 +158,7 @@ export const UrlInputBar: React.FC<UrlInputBarProps> = ({
                 type="button"
                 onClick={() => setShowHistory(!showHistory)}
                 className={`p-1.5 rounded-md transition-colors ${
-                  showHistory ? 'bg-indigo-100 text-indigo-700' : 'text-zinc-400 hover:text-zinc-700 hover:bg-zinc-200/60'
+                  showHistory ? 'bg-indigo-500/20 text-indigo-300' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
                 }`}
                 title="Recent URLs"
               >
@@ -176,21 +176,21 @@ export const UrlInputBar: React.FC<UrlInputBarProps> = ({
             onClick={() => onChangeConfig({ useCacheBuster: !config.useCacheBuster })}
             className={`inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-medium border transition-colors ${
               config.useCacheBuster
-                ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
-                : 'bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-50'
+                ? 'bg-indigo-500/20 border-indigo-500/40 text-indigo-300'
+                : 'bg-zinc-800/80 border-zinc-700/60 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
             }`}
             title="Adds ?_t=timestamp query parameter to bypass HTTP caching mechanisms"
           >
-            <Shield className={`w-3.5 h-3.5 ${config.useCacheBuster ? 'text-indigo-600' : 'text-zinc-400'}`} />
+            <Shield className={`w-3.5 h-3.5 ${config.useCacheBuster ? 'text-indigo-400' : 'text-zinc-400'}`} />
             <span>Cache Buster</span>
-            {config.useCacheBuster && <Check className="w-3 h-3 text-indigo-600" />}
+            {config.useCacheBuster && <Check className="w-3 h-3 text-indigo-400" />}
           </button>
 
           <button
             id="instant-refresh-btn"
             type="button"
             onClick={onInstantRefresh}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold bg-zinc-900 text-white hover:bg-zinc-800 transition-colors shadow-xs"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border border-zinc-700/60 transition-colors shadow-xs"
           >
             <span>Refresh Now</span>
           </button>
@@ -199,8 +199,8 @@ export const UrlInputBar: React.FC<UrlInputBarProps> = ({
 
       {/* Recent URLs dropdown */}
       {showHistory && recentUrls.length > 0 && (
-        <div className="mt-3 p-2 bg-zinc-50 rounded-xl border border-zinc-200">
-          <div className="text-[11px] font-semibold text-zinc-400 px-2 py-1 uppercase tracking-wider">
+        <div className="mt-3 p-2 bg-zinc-950 rounded-xl border border-zinc-800">
+          <div className="text-[11px] font-semibold text-zinc-500 px-2 py-1 uppercase tracking-wider">
             Recently Visited Sites
           </div>
           <div className="flex flex-col gap-1 max-h-36 overflow-y-auto">
@@ -213,10 +213,10 @@ export const UrlInputBar: React.FC<UrlInputBarProps> = ({
                   onSelectRecentUrl(recent);
                   setShowHistory(false);
                 }}
-                className="text-left px-2 py-1.5 rounded-lg text-xs font-mono text-zinc-700 hover:bg-white hover:text-indigo-600 truncate transition-colors flex items-center justify-between"
+                className="text-left px-2 py-1.5 rounded-lg text-xs font-mono text-zinc-300 hover:bg-zinc-900 hover:text-indigo-400 truncate transition-colors flex items-center justify-between"
               >
                 <span>{recent}</span>
-                <span className="text-[10px] text-zinc-400">select</span>
+                <span className="text-[10px] text-zinc-500">select</span>
               </button>
             ))}
           </div>
@@ -225,7 +225,7 @@ export const UrlInputBar: React.FC<UrlInputBarProps> = ({
 
       {/* Quick Sample Presets */}
       <div className="mt-3 flex flex-wrap items-center gap-1.5 text-xs">
-        <span className="text-zinc-400 font-medium">Sample sites:</span>
+        <span className="text-zinc-500 font-medium">Sample sites:</span>
         {SAMPLE_URLS.map((sample) => (
           <button
             key={sample.url}
@@ -235,7 +235,7 @@ export const UrlInputBar: React.FC<UrlInputBarProps> = ({
               onChangeConfig({ url: sample.url });
               onSelectRecentUrl(sample.url);
             }}
-            className="px-2 py-0.5 rounded-md bg-zinc-100 hover:bg-zinc-200 text-zinc-600 hover:text-zinc-900 text-[11px] font-medium transition-colors"
+            className="px-2 py-0.5 rounded-md bg-zinc-800/70 hover:bg-zinc-800 text-zinc-300 hover:text-zinc-100 text-[11px] font-medium border border-zinc-700/40 transition-colors"
           >
             {sample.label}
           </button>
