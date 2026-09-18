@@ -100,6 +100,10 @@ export const RailwayDeployModal: React.FC<RailwayDeployModalProps> = ({ isOpen, 
             </div>
             <div className="grid grid-cols-2 gap-2 text-zinc-700">
               <div>
+                <span className="text-zinc-400 block text-[10px]">Node Version:</span>
+                <code className="font-mono text-[11px] font-semibold text-emerald-600">Node 22 (LTS)</code>
+              </div>
+              <div>
                 <span className="text-zinc-400 block text-[10px]">Build Command:</span>
                 <code className="font-mono text-[11px] font-semibold">npm run build</code>
               </div>
