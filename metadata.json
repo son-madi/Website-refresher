@@ -1,0 +1,7 @@
+{
+  "name": "Auto Website Refresher",
+  "description": "Configurable website auto-refresher and keep-alive pinger with custom 10-45s intervals, live frame preview, and Railway deployment support.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
