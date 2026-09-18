@@ -14,7 +14,7 @@ import { ActivityLog } from './components/ActivityLog';
 import { RailwayDeployModal } from './components/RailwayDeployModal';
 import { RefreshConfig, RefreshLogEntry, SessionStats, PingResult, RunnerStatus } from './types';
 import { playRefreshChime } from './utils/audio';
-import { LayoutGrid, Eye, Terminal, Play, Square, Pause, RotateCcw } from 'lucide-react';
+import { LayoutGrid, Eye, Terminal, Play, Square, Pause, RotateCcw, Cloud, CheckCircle2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 const LOCAL_STORAGE_RECENT_URLS = 'auto_refresher_recent_urls';
@@ -92,6 +92,8 @@ export default function App() {
   });
 
   const isRunning = runnerStatus === 'running';
+  const runnerStatusRef = useRef<RunnerStatus>(runnerStatus);
+  runnerStatusRef.current = runnerStatus;
 
   // Calculate next cycle duration based on current config
   const calculateNextInterval = useCallback((): number => {
@@ -103,6 +105,101 @@ export default function App() {
     }
     return Math.max(1, currentCfg.fixedSeconds);
   }, []);
+
+  // Sync state from server 24/7 background runner
+  const syncRunnerStatus = useCallback(async () => {
+    try {
+      const res = await fetch('/api/runner/status');
+      if (!res.ok) return;
+      const data = await res.json();
+
+      if (data.runnerStatus === 'running' || data.runnerStatus === 'paused') {
+        setRunnerStatus(data.runnerStatus);
+        if (data.targetUrl && data.targetUrl !== configRef.current.url) {
+          setConfig((prev) => ({ ...prev, url: data.targetUrl }));
+        }
+        if (typeof data.uptimeSeconds === 'number') {
+          setUptimeSeconds(data.uptimeSeconds);
+        }
+        if (data.nextRefreshTimestamp) {
+          nextRefreshTimestampRef.current = data.nextRefreshTimestamp;
+          const remaining = Math.max(0, (data.nextRefreshTimestamp - Date.now()) / 1000);
+          setRemainingSeconds(parseFloat(remaining.toFixed(1)));
+        }
+        if (data.stats) {
+          setStats((prev) => {
+            // If new refreshes completed while user was away, reload iframe preview
+            if (data.stats.totalRefreshes > prev.totalRefreshes) {
+              setRefreshKey((k) => k + 1);
+            }
+            return {
+              totalRefreshes: data.stats.totalRefreshes,
+              successfulRefreshes: data.stats.successfulRefreshes,
+              failedRefreshes: data.stats.failedRefreshes,
+              averageLatencyMs: data.stats.averageLatencyMs,
+              startedAt: data.startedAt ? new Date(data.startedAt) : prev.startedAt,
+              lastRefreshedAt: data.lastPing?.timestamp ? new Date(data.lastPing.timestamp) : prev.lastRefreshedAt,
+            };
+          });
+          setCycleCount(data.stats.totalRefreshes);
+        }
+        if (data.lastPing) {
+          setLastPing(data.lastPing);
+        }
+        if (Array.isArray(data.logs) && data.logs.length > 0) {
+          setLogs(
+            data.logs.map((item: any) => ({
+              id: item.id,
+              timestamp: new Date(item.timestamp),
+              url: item.url,
+              intervalUsed: item.intervalUsed,
+              status: item.status,
+              statusCode: item.statusCode,
+              latencyMs: item.latencyMs,
+              message: item.message,
+              cacheBusterApplied: item.cacheBusterApplied,
+            }))
+          );
+        }
+      } else if (data.runnerStatus === 'idle' && runnerStatusRef.current === 'running') {
+        setRunnerStatus('stopped');
+      }
+    } catch (err) {
+      console.error('Failed to sync runner status with server:', err);
+    }
+  }, []);
+
+  // Initial mount: load active background runner state from server
+  useEffect(() => {
+    syncRunnerStatus();
+  }, [syncRunnerStatus]);
+
+  // When user returns to tab (even after 10+ minutes or reopening browser), immediately re-sync
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        syncRunnerStatus();
+      }
+    };
+
+    const handleFocus = () => {
+      syncRunnerStatus();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
+
+    // Light background heartbeat poll every 2.5 seconds to sync stats & logs from server
+    const pollTimer = setInterval(() => {
+      syncRunnerStatus();
+    }, 2500);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+      clearInterval(pollTimer);
+    };
+  }, [syncRunnerStatus]);
 
   // Persist config changes
   useEffect(() => {
@@ -170,9 +267,7 @@ export default function App() {
       // Check max cycles auto-stop
       if (currentCfg.maxCycles > 0 && newCount >= currentCfg.maxCycles) {
         setTimeout(() => {
-          setRunnerStatus('stopped');
-          nextRefreshTimestampRef.current = 0;
-          isRefreshingRef.current = false;
+          handleStop();
           setLogs((l) => [
             {
               id: `${Date.now()}-limit`,
@@ -273,8 +368,8 @@ export default function App() {
     return () => clearInterval(uptimeTimer);
   }, [runnerStatus]);
 
-  // Explicit START Function
-  const handleStart = () => {
+  // Explicit START Function: Starts both server 24/7 runner and client UI loop
+  const handleStart = async () => {
     if (!stats.startedAt) {
       setStats((prev) => ({ ...prev, startedAt: new Date() }));
     }
@@ -286,6 +381,25 @@ export default function App() {
     pausedRemainingSecondsRef.current = 0;
     setRunnerStatus('running');
 
+    // Notify backend server to execute 24/7 background refresh loop
+    try {
+      await fetch('/api/runner/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: config.url,
+          intervalType: config.intervalType,
+          fixedSeconds: config.fixedSeconds,
+          randomMinSeconds: config.randomMinSeconds,
+          randomMaxSeconds: config.randomMaxSeconds,
+          refreshMode: config.refreshMode,
+          useCacheBuster: config.useCacheBuster,
+        }),
+      });
+    } catch (err) {
+      console.error('Failed to notify backend runner start:', err);
+    }
+
     // Add log event
     setLogs((prev) => [
       {
@@ -295,15 +409,18 @@ export default function App() {
         intervalUsed: nextDuration,
         status: 'success',
         statusCode: 200,
-        message: `Auto-refresh started. Cycle interval: ${nextDuration}s (${config.intervalType === 'random' ? 'random range' : 'fixed'})`,
+        message: `Auto-refresh started. Continuous 24/7 server keep-alive active (${nextDuration}s cycle).`,
         cacheBusterApplied: config.useCacheBuster,
       },
       ...prev.slice(0, 99),
     ]);
+
+    // Fire initial refresh right away
+    triggerRefreshCycle(true);
   };
 
   // Explicit STOP Function
-  const handleStop = () => {
+  const handleStop = async () => {
     setRunnerStatus('stopped');
     nextRefreshTimestampRef.current = 0;
     pausedRemainingSecondsRef.current = 0;
@@ -311,6 +428,12 @@ export default function App() {
     const nextDuration = calculateNextInterval();
     setCurrentIntervalDuration(nextDuration);
     setRemainingSeconds(nextDuration);
+
+    try {
+      await fetch('/api/runner/stop', { method: 'POST' });
+    } catch (err) {
+      console.error('Failed to notify backend runner stop:', err);
+    }
 
     setLogs((prev) => [
       {
@@ -328,14 +451,20 @@ export default function App() {
   };
 
   // Explicit PAUSE Function
-  const handlePause = () => {
+  const handlePause = async () => {
     const remainingMs = Math.max(0, nextRefreshTimestampRef.current - Date.now());
     pausedRemainingSecondsRef.current = remainingMs / 1000;
     setRunnerStatus('paused');
+
+    try {
+      await fetch('/api/runner/pause', { method: 'POST' });
+    } catch (err) {
+      console.error('Failed to notify backend runner pause:', err);
+    }
   };
 
   // Explicit RESUME Function
-  const handleResume = () => {
+  const handleResume = async () => {
     const resumeDuration = pausedRemainingSecondsRef.current > 0.2
       ? pausedRemainingSecondsRef.current
       : calculateNextInterval();
@@ -343,6 +472,12 @@ export default function App() {
     setRemainingSeconds(parseFloat(resumeDuration.toFixed(1)));
     isRefreshingRef.current = false;
     setRunnerStatus('running');
+
+    try {
+      await fetch('/api/runner/resume', { method: 'POST' });
+    } catch (err) {
+      console.error('Failed to notify backend runner resume:', err);
+    }
   };
 
   // Instant Force Refresh
@@ -351,8 +486,13 @@ export default function App() {
   };
 
   // Reset Session Statistics & Logs
-  const handleResetStats = () => {
+  const handleResetStats = async () => {
     const nextDuration = calculateNextInterval();
+    try {
+      await fetch('/api/runner/reset-stats', { method: 'POST' });
+    } catch (err) {
+      console.error('Failed to reset backend stats:', err);
+    }
     setStats({
       totalRefreshes: 0,
       successfulRefreshes: 0,
@@ -460,6 +600,53 @@ export default function App() {
 
       {/* Main Workspace */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-3.5 sm:p-6 lg:p-8 space-y-6 relative z-10">
+        {/* Persistent 24/7 Background Runner Status Banner */}
+        <div className="bg-gradient-to-r from-indigo-950/40 via-zinc-900/90 to-emerald-950/30 border border-indigo-500/30 rounded-2xl p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg shadow-black/20">
+          <div className="flex items-start sm:items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 flex items-center justify-center shrink-0">
+              <Cloud className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs sm:text-sm font-bold text-zinc-100">
+                  Continuous 24/7 Server Keep-Alive & Background Runner
+                </span>
+                <span
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold ${
+                    isRunning
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                      : runnerStatus === 'paused'
+                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                      : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
+                  }`}
+                >
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      isRunning ? 'bg-emerald-400 animate-ping' : 'bg-zinc-500'
+                    }`}
+                  />
+                  {isRunning ? 'Active on Server 24/7' : runnerStatus === 'paused' ? 'Paused' : 'Ready'}
+                </span>
+              </div>
+              <p className="text-xs text-zinc-400 mt-0.5 leading-relaxed">
+                {isRunning
+                  ? 'Refreshes continuously on the server backend even if you close this tab, switch apps, or leave your computer for hours.'
+                  : 'Refreshes run persistently in the cloud background even when you leave or close this browser window.'}
+              </p>
+            </div>
+          </div>
+          {isRunning && (
+            <div className="flex items-center gap-3 self-end sm:self-center shrink-0 border-t sm:border-t-0 sm:border-l border-zinc-800 pt-2 sm:pt-0 sm:pl-4">
+              <div className="text-left sm:text-right">
+                <span className="text-[10px] text-zinc-400 block font-mono">Completed Refreshes</span>
+                <span className="text-xs font-bold text-emerald-400 font-mono">
+                  {stats.totalRefreshes} cycles
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Top Control Grid: URL Input + Interval Configuration */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
           {/* Left Column: Target Website & Master Controls */}
