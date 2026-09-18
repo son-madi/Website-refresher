@@ -25,6 +25,7 @@ export interface PingResult {
   contentType: string;
   blocksIframe: boolean;
   xFrameOptions?: string | null;
+  isRailway?: boolean;
   url: string;
   timestamp: string;
   error?: string;

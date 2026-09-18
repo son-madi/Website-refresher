@@ -41,7 +41,10 @@ export const LiveFrame: React.FC<LiveFrameProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
 
   const cleanUrl = url.trim();
-  const displayUrl = cleanUrl || 'about:blank';
+  const normalizedUrl = cleanUrl && !cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://') && !cleanUrl.startsWith('about:')
+    ? `https://${cleanUrl}`
+    : cleanUrl;
+  const displayUrl = normalizedUrl || 'about:blank';
   const blocksIframe = lastPing?.blocksIframe || iframeError;
 
   useEffect(() => {
@@ -233,7 +236,9 @@ export const LiveFrame: React.FC<LiveFrameProps> = ({
                 <span>Auto-Refresh & Keep-Alive Are Fully Operational</span>
               </div>
               <p className="text-emerald-700 text-[11px] leading-relaxed">
-                The background HTTP pinger is keeping this site warm on your configured schedule. Refreshes continue running uninterrupted.
+                {url.toLowerCase().includes('railway.app')
+                  ? 'Your Railway web app is being pinged via HTTP to prevent container sleep and keep cold-start latency low. The background runner keeps it alive 24/7.'
+                  : 'The background HTTP pinger is keeping this site warm on your configured schedule. Refreshes continue running uninterrupted.'}
               </p>
             </div>
             <div className="flex items-center gap-3">

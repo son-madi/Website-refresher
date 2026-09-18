@@ -13,8 +13,8 @@ interface UrlInputBarProps {
 
 const SAMPLE_URLS = [
   { label: 'Example Domain', url: 'https://example.com' },
+  { label: 'Railway App', url: 'https://demo-service.up.railway.app' },
   { label: 'HTTPBin Status', url: 'https://httpbin.org/get' },
-  { label: 'Wikipedia Random', url: 'https://en.wikipedia.org/wiki/Special:Random' },
   { label: 'Cloudflare Trace', url: 'https://1.1.1.1/cdn-cgi/trace' },
 ];
 
@@ -29,16 +29,26 @@ export const UrlInputBar: React.FC<UrlInputBarProps> = ({
   const [showHistory, setShowHistory] = useState(false);
   const [inputValue, setInputValue] = useState(config.url);
 
+  const isRailwayUrl = inputValue.toLowerCase().includes('railway.app');
+
+  const normalizeUrl = (val: string): string => {
+    let clean = val.trim();
+    if (clean && !clean.startsWith('http://') && !clean.startsWith('https://')) {
+      clean = `https://${clean}`;
+    }
+    return clean;
+  };
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setInputValue(val);
-    onChangeConfig({ url: val });
+    const normalized = normalizeUrl(val);
+    onChangeConfig({ url: normalized || val });
   };
 
   const handleBlurOrSubmit = () => {
-    let cleanUrl = inputValue.trim();
-    if (cleanUrl && !cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
-      cleanUrl = `https://${cleanUrl}`;
+    const cleanUrl = normalizeUrl(inputValue);
+    if (cleanUrl !== inputValue) {
       setInputValue(cleanUrl);
       onChangeConfig({ url: cleanUrl });
     }
@@ -48,10 +58,17 @@ export const UrlInputBar: React.FC<UrlInputBarProps> = ({
     <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm p-4 sm:p-5 transition-all">
       {/* Top row: Label & mode badges */}
       <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-        <label htmlFor="target-website-input" className="text-xs font-semibold uppercase tracking-wider text-zinc-500 flex items-center gap-1.5">
-          <Globe className="w-3.5 h-3.5 text-indigo-600" />
-          Target Website URL
-        </label>
+        <div className="flex items-center gap-2">
+          <label htmlFor="target-website-input" className="text-xs font-semibold uppercase tracking-wider text-zinc-500 flex items-center gap-1.5">
+            <Globe className="w-3.5 h-3.5 text-indigo-600" />
+            Target Website URL
+          </label>
+          {isRailwayUrl && (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-violet-100 text-violet-700 border border-violet-200">
+              Railway App Detected
+            </span>
+          )}
+        </div>
 
         {/* Mode Selector */}
         <div className="flex items-center bg-zinc-100 p-0.5 rounded-lg border border-zinc-200/80 text-xs">

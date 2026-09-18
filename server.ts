@@ -1,6 +1,5 @@
 import express, { Request, Response } from 'express';
 import path from 'path';
-import { createServer as createViteServer } from 'vite';
 
 async function startServer() {
   const app = express();
@@ -8,12 +7,14 @@ async function startServer() {
 
   app.use(express.json());
 
-  // Health endpoint for Railway and monitoring checks
-  app.get('/api/health', (_req: Request, res: Response) => {
-    res.json({
+  // Health endpoint for Railway, monitoring, and keep-alive checks
+  // Supports GET and HEAD on multiple paths
+  app.all(['/api/health', '/health', '/ping'], (_req: Request, res: Response) => {
+    res.status(200).json({
       status: 'ok',
       service: 'auto-website-refresher',
       uptime: process.uptime(),
+      port: PORT,
       timestamp: new Date().toISOString(),
     });
   });
@@ -32,9 +33,10 @@ async function startServer() {
     // Validate URL format
     let parsedUrl: URL;
     try {
-      parsedUrl = new URL(targetUrl.startsWith('http://') || targetUrl.startsWith('https://') 
-        ? targetUrl 
-        : `https://${targetUrl}`);
+      const clean = targetUrl.trim();
+      parsedUrl = new URL(clean.startsWith('http://') || clean.startsWith('https://') 
+        ? clean 
+        : `https://${clean}`);
     } catch {
       res.status(400).json({ error: 'Invalid URL format' });
       return;
@@ -44,30 +46,24 @@ async function startServer() {
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 12000);
+      // 25 second timeout to allow cold-starting Railway / Render sleeping containers
+      const timeoutId = setTimeout(() => controller.abort(), 25000);
 
-      // Attempt HEAD request first for efficiency, fallback to GET if disallowed
       let response: globalThis.Response;
+      const requestHeaders = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+      };
+
       try {
-        response = await fetch(parsedUrl.toString(), {
-          method: 'HEAD',
-          signal: controller.signal,
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (compatible; AutoWebRefresher/1.0; KeepAliveBot)',
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache',
-          },
-        });
-      } catch {
-        // If HEAD fails or is rejected, retry with GET
         response = await fetch(parsedUrl.toString(), {
           method: 'GET',
           signal: controller.signal,
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (compatible; AutoWebRefresher/1.0; KeepAliveBot)',
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache',
-          },
+          redirect: 'follow',
+          headers: requestHeaders,
         });
       } finally {
         clearTimeout(timeoutId);
@@ -76,6 +72,11 @@ async function startServer() {
       const latencyMs = Math.round(performance.now() - startTime);
       const xFrameOptions = response.headers.get('x-frame-options');
       const csp = response.headers.get('content-security-policy') || '';
+      const serverHeader = response.headers.get('server') || '';
+      const isRailway = parsedUrl.hostname.endsWith('railway.app') || 
+                        serverHeader.toLowerCase().includes('railway') || 
+                        response.headers.has('x-railway-router');
+
       const blocksIframe = Boolean(
         (xFrameOptions && ['DENY', 'SAMEORIGIN'].includes(xFrameOptions.toUpperCase())) ||
         (csp && csp.toLowerCase().includes('frame-ancestors'))
@@ -89,6 +90,7 @@ async function startServer() {
         contentType: response.headers.get('content-type') || 'unknown',
         blocksIframe,
         xFrameOptions: xFrameOptions || null,
+        isRailway,
         url: parsedUrl.toString(),
         timestamp: new Date().toISOString(),
       });
@@ -100,7 +102,7 @@ async function startServer() {
       res.status(200).json({
         ok: false,
         status: isTimeout ? 408 : 502,
-        statusText: isTimeout ? 'Request Timeout (12s)' : (error.message || 'Network Fetch Failed'),
+        statusText: isTimeout ? 'Request Timeout (25s - server may be cold booting)' : (error.message || 'Network Fetch Failed'),
         latencyMs,
         contentType: 'none',
         blocksIframe: false,
@@ -113,21 +115,27 @@ async function startServer() {
 
   // Vite middleware in dev or static files in prod
   if (process.env.NODE_ENV !== 'production') {
-    const vite = await createViteServer({
+    const { createServer } = await import('vite');
+    const vite = await createServer({
       server: { middlewareMode: true },
       appType: 'spa',
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
+    const distPath = path.resolve(process.cwd(), 'dist');
+    app.use(express.static(distPath, { index: false }));
+
+    app.get('/', (_req: Request, res: Response) => {
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
+
     app.get('*', (_req: Request, res: Response) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Auto Website Refresher running on port ${PORT}`);
+    console.log(`Auto Website Refresher running on port ${PORT} (0.0.0.0)`);
   });
 }
 
